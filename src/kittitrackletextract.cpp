@@ -3,16 +3,8 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/common/point_operators.h>
 #include <pcl/common/io.h>
-#include <pcl/search/organized.h>
-#include <pcl/search/octree.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/features/normal_3d_omp.h>
-#include <pcl/filters/conditional_removal.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/segmentation/extract_clusters.h>
-#include <pcl/surface/gp3.h>
 #include <pcl/io/vtk_io.h>
-#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h>
 
 #include <iostream>
 #include <fstream>
@@ -74,19 +66,30 @@ int main(int argc, char **argv){
 	pcl::fromROSMsg (blob, *cloud);
 	cout << "done." << endl;
 
+	pcl::CropBox<PointXYZI> clipper;
+	clipper.setInputCloud(cloud);
+
+	pcl::PCDWriter writer;
+	pcl::PointCloud<PointXYZI>::Ptr outcloud;
+
 	//For each tracklet, extract the points
 	for(int i = 0; i < tracklets->numberOfTracklets(); i++){
 		Tracklets::tTracklet* tracklet = tracklets->getTracklet(i);
 		if(objtype.empty() || tracklet->objectType == objtype){
-			//
+			Tracklets::tPose *pose;
+			if(tracklets->getPose(i, 0, pose)){
+				outcloud.reset(new pcl::PointCloud<PointXYZI>);
+				clipper.setTranslation(Eigen::Vector3f(pose->tx, pose->ty, pose->tz));
+				clipper.setRotation(Eigen::Vector3f(pose->rx, pose->ry, pose->rz));
+				clipper.filter(*outcloud);
+
+				if(!outcloud->empty()){
+					writer.write<PointXYZI> (outfile, *outcloud, false);
+				}
+			}
 		}
 
 	}
-
-    /*pcl::PCDWriter writer;
-
-    // Save DoN features
-    writer.write<PointXYZI> (outfile, *points, false);*/
 
     delete tracklets;
 }
