@@ -32,6 +32,8 @@ int main(int argc, char **argv){
 	// Declare the supported options.
 	po::options_description desc("Program options");
 	desc.add_options()
+		//Program mode option
+		("help", "produce help message")
 		//Options
 		("infile", po::value<string>(&infile)->required(), "the file to read a point cloud from")
 		("tracklets", po::value<string>(&trackletfile)->required(), "the file to read kitti tracklet annotations from")
@@ -74,6 +76,9 @@ int main(int argc, char **argv){
 
 	//For each tracklet, extract the points
 	for(int i = 0; i < tracklets->numberOfTracklets(); i++){
+		if(!tracklets->isActive(i,0)){
+			continue;
+		}
 		Tracklets::tTracklet* tracklet = tracklets->getTracklet(i);
 		if(objtype.empty() || tracklet->objectType == objtype){
 			Tracklets::tPose *pose;
@@ -81,10 +86,18 @@ int main(int argc, char **argv){
 				outcloud.reset(new pcl::PointCloud<PointXYZI>);
 				clipper.setTranslation(Eigen::Vector3f(pose->tx, pose->ty, pose->tz));
 				clipper.setRotation(Eigen::Vector3f(pose->rx, pose->ry, pose->rz));
+				clipper.setMin(-Eigen::Vector4f(tracklet->l/2, tracklet->w/2, 0, 0));
+				clipper.setMax(Eigen::Vector4f(tracklet->l/2, tracklet->w/2, tracklet->h, 0));
 				clipper.filter(*outcloud);
 
+				stringstream outfilename;
+				outfilename << outfile << tracklet->objectType << i << ".pcd";
+
 				if(!outcloud->empty()){
-					writer.write<PointXYZI> (outfile, *outcloud, false);
+					cout << "Found "<<outcloud->size() << " points, writing to " << outfilename.str() << endl;
+					writer.write<PointXYZI> (outfilename.str(), *outcloud, false);
+				}else{
+					cerr << "Couldn't find points for tracklet" << tracklet->objectType << i << endl;
 				}
 			}
 		}
